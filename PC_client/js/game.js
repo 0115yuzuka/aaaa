@@ -7,13 +7,18 @@ class FishingGame {
     this.lurePosition = { x: window.innerWidth / 2, y: 100 };
     this.fishes = [];
 
+    // センサー関連の設定
     this.setupSocketIo();
+    this.setupMotionSensor();
+    this.setupGyroscope();
+    this.setupButtonClick(); // ボタンクリック処理のセットアップ
+
     this.createFishes();
     this.startGameLoop();
   }
 
   setupSocketIo() {
-    this.socket = io("http://172.24.81.53:3000"); // サーバーのIPアドレスとポートを指定
+    this.socket = io("http://172.24.81.36:3000"); // サーバーのIPアドレスとポートを指定
 
     this.socket.on("connect", () => {
       console.log("Connected to server");
@@ -32,8 +37,100 @@ class FishingGame {
     });
 
     this.socket.on("movement", (data) => {
+      console.log("Received movement data:", data); // 受け取ったデータをコンソールに表示
       this.updateLurePosition(data.x, data.y, data.z);
     });
+
+    this.socket.on("gyroscope", (data) => {
+      console.log("Gyroscope data received:", data);
+      this.updateLurePositionWithGyroscope(data.alpha, data.beta, data.gamma);
+    });
+  }
+
+  setupMotionSensor() {
+    if (window.DeviceMotionEvent) {
+      window.addEventListener("devicemotion", (event) => {
+        const x = event.accelerationIncludingGravity.x;
+        const y = event.accelerationIncludingGravity.y;
+        const z = event.accelerationIncludingGravity.z;
+
+        console.log("Sending movement data to server (Acceleration):", {
+          x,
+          y,
+          z,
+        });
+
+        this.socket.emit("movement", { x, y, z }, (response) => {
+          console.log("Movement data sent, server response:", response);
+        });
+      });
+    } else {
+      console.error("モーションセンサーがサポートされていません。");
+      alert("このデバイスはモーションセンサーをサポートしていません。");
+    }
+  }
+
+  setupGyroscope() {
+    if (window.DeviceOrientationEvent) {
+      window.addEventListener("deviceorientation", (event) => {
+        const alpha = event.alpha; // 回転角 (z軸)
+        const beta = event.beta; // 回転角 (x軸)
+        const gamma = event.gamma; // 回転角 (y軸)
+
+        console.log("Sending gyroscope data to server:", {
+          alpha,
+          beta,
+          gamma,
+        });
+
+        this.socket.emit("gyroscope", { alpha, beta, gamma }, (response) => {
+          console.log("Gyroscope data sent, server response:", response);
+        });
+      });
+    } else {
+      console.error("ジャイロセンサーがサポートされていません。");
+      alert("このデバイスはジャイロセンサーをサポートしていません。");
+    }
+  }
+
+  setupButtonClick() {
+    const button = document.getElementById("sendButton"); // ボタンのIDを指定
+    if (button) {
+      button.addEventListener("click", () => {
+        const message = "ボタンがクリックされました！"; // 送信するメッセージ
+        console.log(message); // コンソールに表示
+
+        // サーバーにメッセージを送信
+        this.socket.emit("button_clicked", { message: message }, (response) => {
+          console.log("Button click data sent, server response:", response);
+        });
+      });
+    }
+  }
+
+  updateLurePosition(x, y, z) {
+    // 加速度データに基づいてルアーの位置を更新
+    this.lurePosition.x += x * 10;
+    this.lurePosition.y = Math.max(
+      100,
+      Math.min(window.innerHeight - 100, this.lurePosition.y + y * 5)
+    );
+  }
+
+  updateLurePositionWithGyroscope(alpha, beta, gamma) {
+    // ジャイロデータに基づいてルアーの位置を更新 (角度の変更に基づいて位置を調整)
+    this.lurePosition.x += gamma * 5; // gamma を x 軸の移動に使う
+    this.lurePosition.y -= beta * 5; // beta を y 軸の移動に使う
+
+    // 画面内に収めるように制限
+    this.lurePosition.x = Math.max(
+      0,
+      Math.min(window.innerWidth, this.lurePosition.x)
+    );
+    this.lurePosition.y = Math.max(
+      100,
+      Math.min(window.innerHeight - 100, this.lurePosition.y)
+    );
   }
 
   createFishes() {
@@ -45,15 +142,6 @@ class FishingGame {
         direction: Math.random() < 0.5 ? -1 : 1,
       });
     }
-  }
-
-  updateLurePosition(x, y, z) {
-    // スマホの傾きデータから釣り竿の位置を計算
-    this.lurePosition.x += x * 10;
-    this.lurePosition.y = Math.max(
-      100,
-      Math.min(window.innerHeight - 100, this.lurePosition.y + y * 5)
-    );
   }
 
   startGameLoop() {

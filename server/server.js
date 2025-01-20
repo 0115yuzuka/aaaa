@@ -8,7 +8,7 @@ const server = http.createServer(app);
 const io = socketIo(server);
 
 const PORT = process.env.PORT || 3000;
-const HOST = "172.24.81.53"; // 指定されたIPアドレスでリッスン
+const HOST = "172.24.81.36"; // 指定されたIPアドレスでリッスン
 
 // 静的ファイルの提供
 app.use("/pc", express.static(path.join(__dirname, "../PC_client")));
